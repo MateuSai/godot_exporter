@@ -28,5 +28,8 @@ fn main() {
         std::process::exit(1);
     }
 
-    exporters::export(args.project_path, args.godot_path, args.output_folder);
+    match exporters::export(args.project_path, args.godot_path, args.output_folder) {
+        Ok(_) => println!("Finished exporting!"),
+        Err(e) => eprintln!("Exporting failed with error {:?}", e),
+    };
 }

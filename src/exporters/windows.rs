@@ -33,7 +33,7 @@ pub fn export(conf: Conf, export_preset: ExportPreset) -> Result<(), Box<dyn std
 
     godot_command?.wait()?;
 
-    println!("Compressing files...");
+    println!("Creating zip...");
 
     let files_to_compress = vec![
         executable_path.to_owned(),

@@ -2,10 +2,14 @@ use std::path::PathBuf;
 
 use ini::Ini;
 
-pub mod windows;
+mod linux;
+mod windows;
 
+#[derive(Debug)]
 pub enum Error {
     IniError(ini::Error),
+    ProjectNameNotFound,
+    ProjectIconNotFound,
 }
 
 pub struct ExportPreset {
@@ -19,7 +23,21 @@ pub fn export(project_path: String, godot_path: String, output: String) -> Resul
         Err(e) => return Err(Error::IniError(e)),
     };
 
-    println!("Project version: {}", get_version(&project_configuration));
+    let project_name: String = match get_project_name(&project_configuration) {
+        Some(name) => name,
+        None => return Err(Error::ProjectNameNotFound),
+    };
+
+    let project_icon_path: PathBuf = PathBuf::from(&project_path).join(
+        match get_project_icon_relative_path(&project_configuration) {
+            Some(path) => path,
+            None => return Err(Error::ProjectIconNotFound),
+        },
+    );
+
+    let project_version = get_project_version(&project_configuration);
+
+    println!("Project version: {:?}", project_version);
 
     let export_presets = match get_export_presets(&project_path) {
         Ok(vec) => vec,
@@ -32,11 +50,29 @@ pub fn export(project_path: String, godot_path: String, output: String) -> Resul
                     output_folder: output.to_owned(),
                     project_path: project_path.to_owned(),
                     godot_path: godot_path.to_owned(),
-                    project_name: get_project_name(&project_configuration),
+                    project_name: project_name.to_owned(),
                 };
                 let windows_result = windows::export(windows_conf, export_preset);
                 if windows_result.is_err() {
-                    eprintln!("Error exporting to windows");
+                    eprintln!(
+                        "Error exporting to windows: {:?}",
+                        windows_result.err().unwrap()
+                    );
+                }
+            }
+            "Linux/X11" => {
+                let linux_conf = linux::Conf {
+                    output_folder: output.to_owned(),
+                    project_path: project_path.to_owned(),
+                    godot_path: godot_path.to_owned(),
+                    project_name: project_name.to_owned(),
+                };
+                let linux_result = linux::export(linux_conf, export_preset);
+                if linux_result.is_err() {
+                    eprintln!(
+                        "Error exporting to linux: {:?}",
+                        linux_result.err().unwrap()
+                    );
                 }
             }
             _ => {
@@ -70,23 +106,32 @@ fn get_export_presets(project_path: &str) -> Result<Vec<ExportPreset>, ini::Erro
     Ok(vec)
 }
 
-fn get_project_name(project_configuration: &Ini) -> String {
-    project_configuration
-        .section(Some("application"))
-        .unwrap()
-        .get("config/name")
-        .unwrap()
-        .to_lowercase()
-        .replace(" ", "_")
+fn get_project_name(project_configuration: &Ini) -> Option<String> {
+    Some(
+        project_configuration
+            .section(Some("application"))?
+            .get("config/name")?
+            .to_owned(),
+    )
 }
 
-fn get_version(project_configuration: &Ini) -> String {
-    project_configuration
-        .section(Some("global"))
-        .unwrap()
-        .get("version")
-        .unwrap()
-        .to_string()
+fn get_project_icon_relative_path(project_configuration: &Ini) -> Option<String> {
+    Some(
+        project_configuration
+            .section(Some("application"))?
+            .get("config/icon")?
+            .strip_prefix("res://")?
+            .to_owned(),
+    )
+}
+
+fn get_project_version(project_configuration: &Ini) -> Option<String> {
+    Some(
+        project_configuration
+            .section(Some("global"))?
+            .get("version")?
+            .to_owned(),
+    )
 }
 
 fn get_project_configuration(project_path: &str) -> Result<Ini, ini::Error> {
