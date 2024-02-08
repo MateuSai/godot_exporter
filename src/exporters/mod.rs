@@ -37,7 +37,7 @@ pub fn export(project_path: String, godot_path: String, output: String) -> Resul
 
     let project_version = get_project_version(&project_configuration);
 
-    println!("Project version: {:?}", project_version);
+    println!("Project version: {:?}", &project_version);
 
     let export_presets = match get_export_presets(&project_path) {
         Ok(vec) => vec,
@@ -51,6 +51,7 @@ pub fn export(project_path: String, godot_path: String, output: String) -> Resul
                     project_path: project_path.to_owned(),
                     godot_path: godot_path.to_owned(),
                     project_name: project_name.to_owned(),
+                    project_version: project_version.to_owned().unwrap_or("".to_owned()),
                 };
                 let windows_result = windows::export(windows_conf, export_preset);
                 if windows_result.is_err() {
@@ -66,6 +67,8 @@ pub fn export(project_path: String, godot_path: String, output: String) -> Resul
                     project_path: project_path.to_owned(),
                     godot_path: godot_path.to_owned(),
                     project_name: project_name.to_owned(),
+                    project_version: project_version.to_owned().unwrap_or("".to_owned()),
+                    project_icon: project_icon_path.to_owned(),
                 };
                 let linux_result = linux::export(linux_conf, export_preset);
                 if linux_result.is_err() {

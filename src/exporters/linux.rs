@@ -12,6 +12,8 @@ pub struct Conf {
     pub godot_path: String,
     pub output_folder: String,
     pub project_name: String,
+    pub project_version: String,
+    pub project_icon: PathBuf,
 }
 
 pub fn export(conf: Conf, export_preset: ExportPreset) -> Result<(), Box<dyn std::error::Error>> {
@@ -60,13 +62,28 @@ pub fn export(conf: Conf, export_preset: ExportPreset) -> Result<(), Box<dyn std
         PathBuf::from(&conf.output_folder).join("install.sh"),
     ];
 
-    let tar_gz = File::create(executable_path.with_extension("tar.gz"))?;
+    let mut tar_path = executable_path.to_owned();
+    tar_path.set_file_name(format!(
+        "{}_{}.tar.gz",
+        executable_path
+            .file_name()
+            .expect("Linux executable does not have file_name")
+            .to_str()
+            .unwrap(),
+        conf.project_version.replace(".", "_"),
+    ));
+    let tar_gz = File::create(tar_path)?;
     let enc = flate2::write::GzEncoder::new(tar_gz, flate2::Compression::default());
     let mut tar = tar::Builder::new(enc);
     for file_path in files_to_compress {
         tar.append_file(file_path.file_name().unwrap(), &mut File::open(&file_path)?)?;
         std::fs::remove_file(file_path)?;
     }
+
+    tar.append_file(
+        executable_path.with_extension("png").file_name().unwrap(),
+        &mut File::open(conf.project_icon)?,
+    )?;
 
     println!("tar.gz created!");
 

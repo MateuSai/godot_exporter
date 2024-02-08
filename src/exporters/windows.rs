@@ -14,11 +14,14 @@ pub struct Conf {
     pub godot_path: String,
     pub output_folder: String,
     pub project_name: String,
+    pub project_version: String,
 }
 
 pub fn export(conf: Conf, export_preset: ExportPreset) -> Result<(), Box<dyn std::error::Error>> {
+    let mut project_name = conf.project_name.to_owned();
+    project_name.push_str(&conf.project_version.replace(".", "_"));
     let executable_path = PathBuf::from(&conf.output_folder)
-        .join(Path::new(conf.project_name.as_str()))
+        .join(Path::new(project_name.as_str()))
         .with_extension("exe");
     let godot_command = Command::new(conf.godot_path)
         .args([
