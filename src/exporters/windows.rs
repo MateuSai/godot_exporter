@@ -2,12 +2,12 @@ use std::{
     fs::File,
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
 use zip::{write::FileOptions, CompressionMethod, ZipWriter};
 
-use super::ExportPreset;
+use super::{ExportMode, ExportPreset};
 
 pub struct Conf {
     pub project_path: String,
@@ -17,24 +17,30 @@ pub struct Conf {
     pub project_version: String,
 }
 
-pub fn export(conf: Conf, export_preset: ExportPreset) -> Result<(), Box<dyn std::error::Error>> {
+pub fn export(
+    export_mode: &ExportMode,
+    conf: Conf,
+    export_preset: &ExportPreset,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut project_name = conf.project_name.to_owned();
+    project_name.push_str("_");
+    project_name.push_str(&export_preset.name);
+    project_name.push_str("_");
     project_name.push_str(&conf.project_version.replace(".", "_"));
     let executable_path = PathBuf::from(&conf.output_folder)
         .join(Path::new(project_name.as_str()))
         .with_extension("exe");
-    let godot_command = Command::new(conf.godot_path)
+    let godot_output = Command::new(conf.godot_path)
         .args([
             "--headless",
             "--path",
             conf.project_path.as_str(),
-            "--export-release",
+            format!("--export-{}", export_mode).as_str(),
             export_preset.name.as_str(),
             executable_path.to_str().unwrap(),
         ])
-        .spawn();
-
-    godot_command?.wait()?;
+        .stderr(Stdio::inherit())
+        .output()?;
 
     println!("Creating zip...");
 

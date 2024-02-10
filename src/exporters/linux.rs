@@ -1,10 +1,10 @@
 use std::{
     fs::File,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
-use super::ExportPreset;
+use super::{ExportMode, ExportPreset};
 
 #[derive(Debug)]
 pub struct Conf {
@@ -16,24 +16,27 @@ pub struct Conf {
     pub project_icon: PathBuf,
 }
 
-pub fn export(conf: Conf, export_preset: ExportPreset) -> Result<(), Box<dyn std::error::Error>> {
+pub fn export(
+    export_mode: &ExportMode,
+    conf: Conf,
+    export_preset: &ExportPreset,
+) -> Result<(), Box<dyn std::error::Error>> {
     println!("conf: {:?}", conf);
 
     let executable_path = PathBuf::from(&conf.output_folder).join(Path::new(
         conf.project_name.to_lowercase().replace(" ", "_").as_str(),
     ));
-    let godot_command = Command::new(conf.godot_path)
+    let godot_output = Command::new(conf.godot_path)
         .args([
             "--headless",
             "--path",
             conf.project_path.as_str(),
-            "--export-release",
+            format!("--export-{}", export_mode).as_str(),
             export_preset.name.as_str(),
             executable_path.to_str().unwrap(),
         ])
-        .spawn();
-
-    godot_command?.wait()?;
+        .stderr(Stdio::inherit())
+        .output();
 
     println!("Creating .desktop file...");
 
@@ -64,12 +67,13 @@ pub fn export(conf: Conf, export_preset: ExportPreset) -> Result<(), Box<dyn std
 
     let mut tar_path = executable_path.to_owned();
     tar_path.set_file_name(format!(
-        "{}_{}.tar.gz",
+        "{}_{}_{}.tar.gz",
         executable_path
             .file_name()
             .expect("Linux executable does not have file_name")
             .to_str()
             .unwrap(),
+        export_preset.name.to_lowercase().replace(" ", "_"),
         conf.project_version.replace(".", "_"),
     ));
     let tar_gz = File::create(tar_path)?;
