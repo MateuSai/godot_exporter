@@ -24,7 +24,11 @@ pub fn export(
     println!("conf: {:?}", conf);
 
     let executable_path = PathBuf::from(&conf.output_folder).join(Path::new(
-        conf.project_name.to_lowercase().replace(" ", "_").as_str(),
+        conf.project_name
+            .to_lowercase()
+            .replace(" ", "_")
+            .replace("/", "_")
+            .as_str(),
     ));
     let godot_output = Command::new(conf.godot_path)
         .args([
@@ -36,7 +40,7 @@ pub fn export(
             executable_path.to_str().unwrap(),
         ])
         .stderr(Stdio::inherit())
-        .output();
+        .output()?;
 
     println!("Creating .desktop file...");
 
@@ -73,15 +77,22 @@ pub fn export(
             .expect("Linux executable does not have file_name")
             .to_str()
             .unwrap(),
-        export_preset.name.to_lowercase().replace(" ", "_"),
+        export_preset
+            .name
+            .to_lowercase()
+            .replace(" ", "_")
+            .replace("/", "_"),
         conf.project_version.replace(".", "_"),
     ));
+    println!("tar path: {}", &tar_path.to_str().unwrap());
     let tar_gz = File::create(tar_path)?;
     let enc = flate2::write::GzEncoder::new(tar_gz, flate2::Compression::default());
     let mut tar = tar::Builder::new(enc);
     for file_path in files_to_compress {
+        println!("Adding {} to tar.gz...", file_path.to_str().unwrap());
         tar.append_file(file_path.file_name().unwrap(), &mut File::open(&file_path)?)?;
-        std::fs::remove_file(file_path)?;
+        std::fs::remove_file(&file_path)?;
+        println!("Added {} to tar.gz", file_path.to_str().unwrap());
     }
 
     tar.append_file(
