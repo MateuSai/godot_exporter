@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.4.18", features = ["derive", "string"] }
-rust-ini = "0.20.0"
+rust-ini = "0.21.0"
 zip = "0.6"
 flate2 = "1.0"
 tar = "0.4"

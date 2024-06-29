@@ -21,5 +21,8 @@ pub struct Cli {
     pub export_mode: ExportMode,
 
     #[arg(short, long)]
+    pub compress: bool,
+
+    #[arg(short, long)]
     pub verbose: bool,
 }

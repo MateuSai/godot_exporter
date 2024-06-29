@@ -14,6 +14,7 @@ pub struct Conf {
     pub project_name: String,
     pub project_version: String,
     pub project_icon: PathBuf,
+    pub compress: bool,
 }
 
 pub fn export(
@@ -60,18 +61,15 @@ pub fn export(
 
     println!("install script created!");
 
-    println!("Creating tar.gz...");
-
-    let files_to_compress = vec![
+    let files = vec![
         executable_path.to_owned(),
         executable_path.with_extension("pck"),
         executable_path.with_extension("desktop"),
         PathBuf::from(&conf.output_folder).join("install.sh"),
     ];
 
-    let mut tar_path = executable_path.to_owned();
-    tar_path.set_file_name(format!(
-        "{}_{}_{}.tar.gz",
+    let container_path = PathBuf::from(conf.output_folder).join(format!(
+        "{}_{}_{}",
         executable_path
             .file_name()
             .expect("Linux executable does not have file_name")
@@ -82,25 +80,44 @@ pub fn export(
             .to_lowercase()
             .replace(" ", "_")
             .replace("/", "_"),
-        conf.project_version.replace(".", "_"),
+        conf.project_version.replace(".", "_")
     ));
-    println!("tar path: {}", &tar_path.to_str().unwrap());
-    let tar_gz = File::create(tar_path)?;
-    let enc = flate2::write::GzEncoder::new(tar_gz, flate2::Compression::default());
-    let mut tar = tar::Builder::new(enc);
-    for file_path in files_to_compress {
-        println!("Adding {} to tar.gz...", file_path.to_str().unwrap());
-        tar.append_file(file_path.file_name().unwrap(), &mut File::open(&file_path)?)?;
-        std::fs::remove_file(&file_path)?;
-        println!("Added {} to tar.gz", file_path.to_str().unwrap());
+
+    if conf.compress {
+        println!("Creating tar.gz...");
+
+        let tar_path = container_path.with_extension("tar.gz");
+        println!("tar path: {}", &tar_path.to_str().unwrap());
+        let tar_gz = File::create(tar_path)?;
+        let enc = flate2::write::GzEncoder::new(tar_gz, flate2::Compression::default());
+        let mut tar = tar::Builder::new(enc);
+        for file_path in files {
+            println!("Adding {} to tar.gz...", file_path.to_str().unwrap());
+            tar.append_file(file_path.file_name().unwrap(), &mut File::open(&file_path)?)?;
+            std::fs::remove_file(&file_path)?;
+            println!("Added {} to tar.gz", file_path.to_str().unwrap());
+        }
+
+        tar.append_file(
+            executable_path.with_extension("png").file_name().unwrap(),
+            &mut File::open(conf.project_icon)?,
+        )?;
+
+        println!("tar.gz created!");
+    } else {
+        println!("Adding files inside foder");
+
+        let folder_path = container_path;
+        std::fs::create_dir(folder_path.to_owned())?;
+        println!("Folder created");
+
+        for file_path in &files {
+            std::fs::rename(
+                file_path,
+                folder_path.to_owned().join(file_path.file_name().unwrap()),
+            )?;
+        }
     }
-
-    tar.append_file(
-        executable_path.with_extension("png").file_name().unwrap(),
-        &mut File::open(conf.project_icon)?,
-    )?;
-
-    println!("tar.gz created!");
 
     Ok(())
 }

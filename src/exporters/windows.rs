@@ -15,6 +15,7 @@ pub struct Conf {
     pub output_folder: String,
     pub project_name: String,
     pub project_version: String,
+    pub compress: bool,
 }
 
 pub fn export(
@@ -28,7 +29,13 @@ pub fn export(
     project_name.push_str("_");
     project_name.push_str(&conf.project_version.replace(".", "_"));
     let executable_path = PathBuf::from(&conf.output_folder)
-        .join(Path::new(project_name.as_str()))
+        .join(Path::new(
+            conf.project_name
+                .to_lowercase()
+                .replace(" ", "_")
+                .replace("/", "_")
+                .as_str(),
+        ))
         .with_extension("exe");
     let godot_output = Command::new(conf.godot_path)
         .args([
@@ -42,31 +49,61 @@ pub fn export(
         .stderr(Stdio::inherit())
         .output()?;
 
-    println!("Creating zip...");
-
-    let files_to_compress = vec![
+    let files = vec![
         executable_path.to_owned(),
         executable_path.with_extension("pck"),
     ];
 
-    let options = FileOptions::default().compression_method(CompressionMethod::DEFLATE);
-    let mut zip = ZipWriter::new(File::create(executable_path.with_extension("zip"))?);
+    let container_path = PathBuf::from(conf.output_folder).join(format!(
+        "{}_{}_{}",
+        executable_path
+            .with_extension("")
+            .file_name()
+            .expect("Linux executable does not have file_name")
+            .to_str()
+            .unwrap(),
+        export_preset
+            .name
+            .to_lowercase()
+            .replace(" ", "_")
+            .replace("/", "_"),
+        conf.project_version.replace(".", "_")
+    ));
 
-    for file_path in &files_to_compress {
-        let file = File::open(file_path)?;
-        zip.start_file(file_path.file_name().unwrap().to_str().unwrap(), options)?;
+    if conf.compress {
+        println!("Creating zip...");
 
-        let mut buffer = Vec::new();
-        std::io::copy(&mut file.take(u64::MAX), &mut buffer)?;
+        let options = FileOptions::default().compression_method(CompressionMethod::DEFLATE);
+        let mut zip = ZipWriter::new(File::create(container_path.with_extension("zip"))?);
 
-        zip.write_all(&buffer)?;
+        for file_path in &files {
+            let file = File::open(file_path)?;
+            zip.start_file(file_path.file_name().unwrap().to_str().unwrap(), options)?;
 
-        std::fs::remove_file(file_path)?;
+            let mut buffer = Vec::new();
+            std::io::copy(&mut file.take(u64::MAX), &mut buffer)?;
+
+            zip.write_all(&buffer)?;
+
+            std::fs::remove_file(file_path)?;
+        }
+
+        zip.finish()?;
+
+        println!("Done compressing files!");
+    } else {
+        println!("Adding files inside foder");
+
+        let folder_path = container_path;
+        std::fs::create_dir(folder_path.to_owned())?;
+
+        for file_path in &files {
+            std::fs::rename(
+                file_path,
+                folder_path.to_owned().join(file_path.file_name().unwrap()),
+            )?;
+        }
     }
-
-    zip.finish()?;
-
-    println!("Done compressing files!");
 
     Ok(())
 }

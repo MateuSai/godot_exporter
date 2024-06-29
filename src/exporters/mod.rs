@@ -42,7 +42,7 @@ pub fn export(cli: &Cli) -> Result<(), Error> {
     };
 
     let project_name: String = match get_project_name(&project_configuration) {
-        Some(name) => name,
+        Some(name) => name.replace("?", ""),
         None => return Err(Error::ProjectNameNotFound),
     };
 
@@ -70,6 +70,7 @@ pub fn export(cli: &Cli) -> Result<(), Error> {
                     godot_path: cli.godot_path.to_owned(),
                     project_name: project_name.to_owned(),
                     project_version: project_version.to_owned().unwrap_or("".to_owned()),
+                    compress: cli.compress,
                 };
                 let windows_result =
                     windows::export(&cli.export_mode, windows_conf, &export_preset);
@@ -90,6 +91,7 @@ pub fn export(cli: &Cli) -> Result<(), Error> {
                     project_name: project_name.to_owned(),
                     project_version: project_version.to_owned().unwrap_or("".to_owned()),
                     project_icon: project_icon_path.to_owned(),
+                    compress: cli.compress,
                 };
                 let linux_result = linux::export(&cli.export_mode, linux_conf, &export_preset);
                 if linux_result.is_err() {
