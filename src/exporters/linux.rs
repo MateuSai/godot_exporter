@@ -108,8 +108,12 @@ pub fn export(
         println!("Adding files inside foder");
 
         let folder_path = container_path;
-        std::fs::create_dir(folder_path.to_owned())?;
-        println!("Folder created");
+        if folder_path.exists() {
+            println!("Folder already exists, reusing it...");
+        } else {
+            std::fs::create_dir(folder_path.to_owned())?;
+            println!("Folder created");
+        }
 
         for file_path in &files {
             std::fs::rename(
