@@ -1,129 +1,127 @@
 use std::{
     fs::File,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
 };
 
-use super::{ExportMode, ExportPreset};
+use crate::{cli::Cli, exporters::TMP_DIR_NAME};
+
+use super::{ExportPreset, Exporter};
 
 #[derive(Debug)]
 pub struct Conf {
-    pub project_path: String,
-    pub godot_path: String,
-    pub output_folder: String,
     pub project_name: String,
     pub project_version: String,
     pub project_icon: PathBuf,
-    pub compress: bool,
 }
 
-pub fn export(
-    export_mode: &ExportMode,
-    conf: Conf,
-    export_preset: &ExportPreset,
-) -> Result<(), Box<dyn std::error::Error>> {
-    println!("conf: {:?}", conf);
+pub struct LinuxExporter {
+    pub conf: Conf,
+    pub preset: ExportPreset,
+}
 
-    let executable_path = PathBuf::from(&conf.output_folder).join(Path::new(
-        conf.project_name
-            .to_lowercase()
-            .replace(" ", "_")
-            .replace("/", "_")
-            .as_str(),
-    ));
-    let godot_output = Command::new(conf.godot_path)
-        .args([
-            "--headless",
-            "--path",
-            conf.project_path.as_str(),
-            format!("--export-{}", export_mode).as_str(),
-            export_preset.name.as_str(),
-            executable_path.to_str().unwrap(),
-        ])
-        .stderr(Stdio::inherit())
-        .output()?;
+impl Exporter for LinuxExporter {
+    fn package(&self, cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
+        println!("conf: {:?}", self.conf);
 
-    println!("Creating .desktop file...");
+        let executable_path = PathBuf::from(&cli.output_folder)
+            .join(TMP_DIR_NAME)
+            .join(Path::new(
+                self.conf
+                    .project_name
+                    .to_lowercase()
+                    .replace(" ", "_")
+                    .replace("/", "_")
+                    .as_str(),
+            ));
 
-    std::fs::write(
-        executable_path.with_extension("desktop"),
-        get_desktop_file_text(&conf.project_name),
-    )?;
-
-    println!(".desktop file created!");
-
-    println!("Creating install script...");
-
-    std::fs::write(
-        PathBuf::from(&conf.output_folder).join("install.sh"),
-        get_install_script_text(&conf.project_name),
-    )?;
-
-    println!("install script created!");
-
-    let files = vec![
-        executable_path.to_owned(),
-        executable_path.with_extension("pck"),
-        executable_path.with_extension("desktop"),
-        PathBuf::from(&conf.output_folder).join("install.sh"),
-    ];
-
-    let container_path = PathBuf::from(conf.output_folder).join(format!(
-        "{}_{}_{}",
-        executable_path
-            .file_name()
-            .expect("Linux executable does not have file_name")
-            .to_str()
-            .unwrap(),
-        export_preset
-            .name
-            .to_lowercase()
-            .replace(" ", "_")
-            .replace("/", "_"),
-        conf.project_version.replace(".", "_")
-    ));
-
-    if conf.compress {
-        println!("Creating tar.gz...");
-
-        let tar_path = container_path.with_extension("tar.gz");
-        println!("tar path: {}", &tar_path.to_str().unwrap());
-        let tar_gz = File::create(tar_path)?;
-        let enc = flate2::write::GzEncoder::new(tar_gz, flate2::Compression::default());
-        let mut tar = tar::Builder::new(enc);
-        for file_path in files {
-            println!("Adding {} to tar.gz...", file_path.to_str().unwrap());
-            tar.append_file(file_path.file_name().unwrap(), &mut File::open(&file_path)?)?;
-            std::fs::remove_file(&file_path)?;
-            println!("Added {} to tar.gz", file_path.to_str().unwrap());
-        }
-
-        tar.append_file(
-            executable_path.with_extension("png").file_name().unwrap(),
-            &mut File::open(conf.project_icon)?,
+        Self::export(
+            cli,
+            &self.preset,
+            self.conf
+                .project_name
+                .to_lowercase()
+                .replace(" ", "_")
+                .replace("/", "_"),
         )?;
 
-        println!("tar.gz created!");
-    } else {
-        println!("Adding files inside foder");
+        println!("Creating .desktop file...");
 
-        let folder_path = container_path;
-        if folder_path.exists() {
-            println!("Folder already exists, reusing it...");
-        } else {
-            std::fs::create_dir(folder_path.to_owned())?;
-            println!("Folder created");
-        }
+        std::fs::write(
+            executable_path.with_extension("desktop"),
+            get_desktop_file_text(&self.conf.project_name),
+        )?;
 
-        for file_path in &files {
-            std::fs::rename(
-                file_path,
-                folder_path.to_owned().join(file_path.file_name().unwrap()),
+        println!(".desktop file created!");
+
+        println!("Creating install script...");
+
+        std::fs::write(
+            PathBuf::from(&cli.output_folder).join("install.sh"),
+            get_install_script_text(&self.conf.project_name),
+        )?;
+
+        println!("install script created!");
+
+        let files = Self::get_exported_files(&cli.output_folder)?;
+        println!("Exported files: {:?}", files);
+
+        let container_path = PathBuf::from(&cli.output_folder).join(format!(
+            "{}_{}_{}",
+            executable_path
+                .file_name()
+                .expect("Linux executable does not have file_name")
+                .to_str()
+                .unwrap(),
+            self.preset
+                .name
+                .to_lowercase()
+                .replace(" ", "_")
+                .replace("/", "_"),
+            self.conf.project_version.replace(".", "_")
+        ));
+
+        if cli.compress {
+            println!("Creating tar.gz...");
+
+            let tar_path = container_path.with_extension("tar.gz");
+            println!("tar path: {}", &tar_path.to_str().unwrap());
+            let tar_gz = File::create(tar_path)?;
+            let enc = flate2::write::GzEncoder::new(tar_gz, flate2::Compression::default());
+            let mut tar = tar::Builder::new(enc);
+            for file_path in files {
+                println!("Adding {} to tar.gz...", file_path.to_str().unwrap());
+                tar.append_file(file_path.file_name().unwrap(), &mut File::open(&file_path)?)?;
+                std::fs::remove_file(&file_path)?;
+                println!("Added {} to tar.gz", file_path.to_str().unwrap());
+            }
+
+            tar.append_file(
+                executable_path.with_extension("png").file_name().unwrap(),
+                &mut File::open(&self.conf.project_icon)?,
             )?;
-        }
-    }
 
-    Ok(())
+            println!("tar.gz created!");
+        } else {
+            println!("Adding files inside foder");
+
+            let folder_path = container_path;
+            if folder_path.exists() {
+                println!("Folder already exists, reusing it...");
+            } else {
+                std::fs::create_dir(folder_path.to_owned())?;
+                println!("Folder created");
+            }
+
+            for file_path in &files {
+                std::fs::rename(
+                    file_path,
+                    folder_path.to_owned().join(file_path.file_name().unwrap()),
+                )?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 fn get_desktop_file_text(project_name: &str) -> String {

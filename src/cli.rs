@@ -1,6 +1,4 @@
-use clap::Parser;
-
-use crate::exporters::ExportMode;
+use clap::{Parser, ValueEnum};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)] // Read from `Cargo.toml`
@@ -25,4 +23,19 @@ pub struct Cli {
 
     #[arg(short, long)]
     pub verbose: bool,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum ExportMode {
+    Debug,
+    Release,
+}
+
+impl std::fmt::Display for ExportMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExportMode::Debug => write!(f, "debug"),
+            ExportMode::Release => write!(f, "release"),
+        }
+    }
 }

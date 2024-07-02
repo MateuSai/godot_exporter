@@ -1,6 +1,8 @@
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    process::{Command, Output, Stdio},
+};
 
-use clap::ValueEnum;
 use ini::Ini;
 
 use crate::cli::Cli;
@@ -8,19 +10,45 @@ use crate::cli::Cli;
 mod linux;
 mod windows;
 
-#[derive(Debug, Clone, ValueEnum)]
-pub enum ExportMode {
-    Debug,
-    Release,
-}
+static TMP_DIR_NAME: &str = "godot_export_tmp_dir";
 
-impl std::fmt::Display for ExportMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExportMode::Debug => write!(f, "debug"),
-            ExportMode::Release => write!(f, "release"),
+pub trait Exporter {
+    fn export(
+        cli: &Cli,
+        export_preset: &ExportPreset,
+        executable_file_name: String,
+    ) -> Result<Output, std::io::Error> {
+        let tmp_dir_path = PathBuf::from(&cli.output_folder).join(TMP_DIR_NAME);
+
+        if tmp_dir_path.exists() {
+            println!("Tmp directory already exists, removing it...");
+            std::fs::remove_dir_all(&tmp_dir_path)?;
         }
+
+        std::fs::create_dir(&tmp_dir_path)?;
+
+        Command::new(&cli.godot_path)
+            .args([
+                "--headless",
+                "--path",
+                cli.project_path.as_str(),
+                format!("--export-{}", cli.export_mode).as_str(),
+                export_preset.name.as_str(),
+                tmp_dir_path.join(executable_file_name).to_str().unwrap(),
+            ])
+            .stderr(Stdio::inherit())
+            .output()
     }
+
+    fn get_exported_files(output_folder: &str) -> Result<Vec<PathBuf>, Box<std::io::Error>> {
+        Ok(
+            std::fs::read_dir(PathBuf::from(output_folder).join(TMP_DIR_NAME))?
+                .map(|path| path.unwrap().path())
+                .collect::<Vec<PathBuf>>(),
+        )
+    }
+
+    fn package(&self, cli: &Cli) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 #[derive(Debug)]
@@ -30,6 +58,7 @@ pub enum Error {
     ProjectIconNotFound,
 }
 
+#[derive(Clone)]
 pub struct ExportPreset {
     name: String,
     platform: String,
@@ -65,15 +94,14 @@ pub fn export(cli: &Cli) -> Result<(), Error> {
         match export_preset.platform.as_str() {
             "Windows Desktop" => {
                 let windows_conf = windows::Conf {
-                    output_folder: cli.output_folder.to_owned(),
-                    project_path: cli.project_path.to_owned(),
-                    godot_path: cli.godot_path.to_owned(),
                     project_name: project_name.to_owned(),
                     project_version: project_version.to_owned().unwrap_or("".to_owned()),
-                    compress: cli.compress,
                 };
-                let windows_result =
-                    windows::export(&cli.export_mode, windows_conf, &export_preset);
+                let windows_exporter = windows::WindowsExporter {
+                    conf: windows_conf,
+                    preset: export_preset.clone(),
+                };
+                let windows_result = windows_exporter.package(&cli);
                 if windows_result.is_err() {
                     eprintln!(
                         "Error exporting to windows: {:?}",
@@ -85,15 +113,15 @@ pub fn export(cli: &Cli) -> Result<(), Error> {
             }
             "Linux/X11" => {
                 let linux_conf = linux::Conf {
-                    output_folder: cli.output_folder.to_owned(),
-                    project_path: cli.project_path.to_owned(),
-                    godot_path: cli.godot_path.to_owned(),
                     project_name: project_name.to_owned(),
                     project_version: project_version.to_owned().unwrap_or("".to_owned()),
                     project_icon: project_icon_path.to_owned(),
-                    compress: cli.compress,
                 };
-                let linux_result = linux::export(&cli.export_mode, linux_conf, &export_preset);
+                let linux_exporter = linux::LinuxExporter {
+                    conf: linux_conf,
+                    preset: export_preset.clone(),
+                };
+                let linux_result = linux_exporter.package(&cli);
                 if linux_result.is_err() {
                     eprintln!(
                         "Error exporting to linux: {:?}",
