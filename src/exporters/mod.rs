@@ -62,6 +62,7 @@ pub enum Error {
 pub struct ExportPreset {
     name: String,
     platform: String,
+    steam: bool,
 }
 
 pub fn export(cli: &Cli) -> Result<(), Error> {
@@ -158,10 +159,14 @@ fn get_export_presets(
             continue;
         }
         let platform = section.get("platform").unwrap_or("no platform");
+        let steam_feature = section
+            .get("custom_features")
+            .map_or(false, |sec| sec.contains("steam"));
 
         vec.push(ExportPreset {
             name: name.to_owned(),
             platform: platform.to_owned(),
+            steam: steam_feature,
         });
 
         i += 1;

@@ -44,23 +44,33 @@ impl Exporter for LinuxExporter {
                 .replace("/", "_"),
         )?;
 
-        println!("Creating .desktop file...");
+        if !self.preset.steam {
+            println!("Creating .desktop file...");
 
-        std::fs::write(
-            executable_path.with_extension("desktop"),
-            get_desktop_file_text(&self.conf.project_name),
-        )?;
+            std::fs::write(
+                executable_path.with_extension("desktop"),
+                get_desktop_file_text(&self.conf.project_name),
+            )?;
 
-        println!(".desktop file created!");
+            println!(".desktop file created!");
 
-        println!("Creating install script...");
+            println!("Creating install script...");
 
-        std::fs::write(
-            PathBuf::from(&cli.output_folder).join("install.sh"),
-            get_install_script_text(&self.conf.project_name),
-        )?;
+            std::fs::write(
+                PathBuf::from(&cli.output_folder).join("install.sh"),
+                get_install_script_text(&self.conf.project_name),
+            )?;
 
-        println!("install script created!");
+            println!("install script created!");
+
+            println!("Coppying icon");
+            std::fs::copy(
+                &self.conf.project_icon,
+                PathBuf::from(&cli.output_folder)
+                    .join(TMP_DIR_NAME)
+                    .join(&self.conf.project_icon.file_name().unwrap()),
+            )?;
+        }
 
         let files = Self::get_exported_files(&cli.output_folder)?;
         println!("Exported files: {:?}", files);
@@ -95,10 +105,10 @@ impl Exporter for LinuxExporter {
                 println!("Added {} to tar.gz", file_path.to_str().unwrap());
             }
 
-            tar.append_file(
+            /*  tar.append_file(
                 executable_path.with_extension("png").file_name().unwrap(),
                 &mut File::open(&self.conf.project_icon)?,
-            )?;
+            )?; */
 
             println!("tar.gz created!");
         } else {
