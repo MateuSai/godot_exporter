@@ -57,7 +57,9 @@ impl Exporter for LinuxExporter {
             println!("Creating install script...");
 
             std::fs::write(
-                PathBuf::from(&cli.output_folder).join("install.sh"),
+                PathBuf::from(&cli.output_folder)
+                    .join(TMP_DIR_NAME)
+                    .join("install.sh"),
                 get_install_script_text(&self.conf.project_name),
             )?;
 
